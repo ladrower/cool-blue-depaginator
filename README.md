@@ -1,0 +1,1 @@
+# cool-blue-depaginator
