@@ -120,6 +120,7 @@
             if (client.cursor.release(this.handler)) {
                 this.onThresholdReached = noop;
                 this.onFrameScrolled = noop;
+                this.onResized = noop;
             }
             return this;
         },
