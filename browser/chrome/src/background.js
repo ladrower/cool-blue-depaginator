@@ -55,7 +55,7 @@ chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
 chrome.runtime.onInstalled.addListener(function (details) {
     if(details.reason == "install"){
         chrome.storage.sync.set({
-            cdn: '//localhost:63342/cool-blue-depaginator/src/',
+            cdn: '//rawgit.com/ladrower/cool-blue-depaginator/master/src/',
             api: '/winkelmandje/',
             debugEnabled: 1
         });
