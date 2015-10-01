@@ -69,7 +69,8 @@
             pagingFooter: '',
             pages: '',
             current: '',
-            next: ''
+            next: '',
+            itemsPerPage: ''
         }
     });
 
@@ -108,7 +109,7 @@
             if (this.isOn()) {
                 this.turnOff();
             }
-            client.cursor.request(this.handler, 5);
+            client.cursor.request(this.handler);
             this.onThresholdReached = onThresholdReached || noop;
             this.onFrameScrolled = onFrameScrolled || noop;
             this.onResized = onResized || noop;
@@ -163,7 +164,6 @@
         this.$context = $context;
         this.selectors = new PagingSelectors(selectors);
         this.reset();
-        this.adjustDimensions();
     }
 
     /**
@@ -176,8 +176,8 @@
 
     Paging.prototype = {
 
-        getContainer: function () {
-            return this.$context.find(this.selectors.get('pagingHeader')).first();
+        getContainer: function ($context) {
+            return ($context || this.$context).find(this.selectors.get('pagingHeader')).first();
         },
 
         adjustDimensions: function (offsetTop) {
@@ -189,7 +189,7 @@
         },
 
         bindEvents: function () {
-            this.getContainer().find(this.selectors.get('pages')).on('click', $.proxy(this.onPageClicked, this));
+            this.getContainer().find(this.selectors.get('pages')).on('click', $.proxy(this.onPageNumberClicked, this));
         },
 
         reposition: function (position) {
@@ -227,6 +227,7 @@
 
             this._pages = [];
             this._current = 0;
+            this._itemsPerPage = this.$context.find(this.selectors.get('itemsPerPage')).val();
 
             this.bindEvents();
 
@@ -247,17 +248,34 @@
             return this._pages[++this._current];
         },
 
-        onPageClicked: function (e) {
-            console.log('test');
-            // TODO: if we have page already loaded - just scroll to it and stop event propagation
-            // else scroll to the top and load the required page
-            
-            //$('html, body').animate({
-            //    scrollTop: this.$context.offset().top
-            //}, 1000);
+        onPageNumberClicked: function (e) {
+            var n = e.target.innerHTML * 1;
+            if (this.getPage(n) !== null) {
+                this.scrollToPage(n);
+                return false;
+            } else {
+                if (this.position === Paging.POSITION.FIXED) {
+                    this.scrollToPage(0);
+                }
+            }
+        },
 
-            e.stopImmediatePropagation();
-            return false;
+        // TODO: detect scroll position and update paging DOM
+
+        /**
+         * @param {!Number} n
+         * @returns {Promise}
+         */
+        scrollToPage: function (n) {
+            var scrollTop = n
+                ? function (self) {
+                    return 0;
+                }(this)
+                : this.$context.offset().top - parseInt(this.getContainer().css('top'));
+
+            return $('html, body').animate({
+                scrollTop: scrollTop
+            }, 100).promise();
         },
 
         collectPagingData: function () {
@@ -280,6 +298,10 @@
             currentPageModel.set('dom', this.getContainer());
         },
 
+        /**
+         * @param {Number} pageNumber
+         * @returns {?PageModel}
+         */
         getPage: function (pageNumber) {
             return $.grep(this._pages, function (page) {
                 return page.get('number') === pageNumber
@@ -298,6 +320,7 @@
         this.vpObserver = u;
         this.paging = u;
         this.isLoading = false;
+        this.loader = u;
         this.$header = u;
         this.$container = u;
         this.bindLazyLoadingImages = u;
@@ -358,35 +381,53 @@
                 return;
             }
 
-            this.isLoading = true;
-
             this.paging.collectPagingData();
 
             if (this.paging.hasNext()) {
+
+                this.isLoading = true;
+
                 next = this.paging.next();
-                $.get(next.get('url')).then(function (response) {
-                    var $r = $(response);
 
-                    dep.$container.find(listSelector).append(
-                        $r.find(listSelector).children()
-                    );
+                dep.loader = new classes.DfdLite();
 
-                    // TODO: move to paging and apply only on specific scroll
-                    dep.$container.find('.paging-header').html(
-                        $r.find('.paging-header').html()
-                    );
-                    dep.paging.bindEvents();
-                    //
+                $.get(next.get('url')).then(
+                    $.proxy(dep.loader.resolve, dep.loader),
+                    $.proxy(dep.loader.reject, dep.loader)
+                );
 
-                    dep.isLoading = false;
-                    dep.bindLazyLoadingImages();
-                });
+                dep.loader.promise()
+                    .done(function (response) {
+                        var $r = $(response);
+
+                        dep.$container.find(listSelector).append(
+                            $r.find(listSelector).children()
+                        );
+
+                        next.set('dom', dep.paging.getContainer($r));
+
+
+                        // TODO: move to paging and apply only on specific scroll
+                        dep.$container.find('.paging-header').first().empty().append(
+                            next.get('dom').children()
+                        );
+                        w.history.pushState(null, null, next.get('url'));
+                        dep.paging.bindEvents();
+                        //
+
+                        dep.bindLazyLoadingImages();
+                    })
+                    .always(function () {
+                        dep.isLoading = false;
+                    });
             }
 
         },
         onAfterPageReloaded: function () {
-            console.log('reloaded');
-            this.isLoading = false;
+            if (this.loader) {
+                this.loader.reject();
+                this.loader = u;
+            }
             this.paging.reset();
             this.vpObserver.trigger();
         }

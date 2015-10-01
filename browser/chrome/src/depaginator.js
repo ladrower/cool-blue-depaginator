@@ -36,11 +36,13 @@ chrome.storage.sync.get(['debugEnabled','cdn','api'], function(options) {
                         header: '.coolblue-bar.sticky-header--bar',
                         container: '#facet_productlist',
                         list: '.product-list-columns',
+                        listItem: '.product-list-columns .product-list-item',
                         pagingHeader: '.paging-header',
                         pagingFooter: '.paging-footer',
                         pages: '.paging-navigation-pages>li>a',
                         current: '.paging-navigation-pages>li.paging-navigation-current-page',
-                        next: '.paging-navigation .pagination.next'
+                        next: '.paging-navigation .pagination.next',
+                        itemsPerPage: '.paging-shown-per-page'
                     });
                     worker.send('event', 'depaginator', 'created');
                 });
