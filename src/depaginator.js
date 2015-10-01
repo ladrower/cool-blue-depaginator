@@ -218,7 +218,7 @@
         reset: function () {
             var container = this.getContainer();
             container.css({
-                'z-index': 100,
+                'z-index': 5,
                 'background-color': '#fff'
             });
 
