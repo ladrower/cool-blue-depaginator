@@ -70,7 +70,8 @@
             pages: '',
             current: '',
             next: '',
-            itemsPerPage: ''
+            itemsPerPage: '',
+            listItem: ''
         }
     });
 
@@ -215,8 +216,25 @@
             }
         },
 
+        updateCurrentPage: function (scrollTop) {
+            var initialPage;
+
+            if (this._pages.length) {
+                initialPage = this._pages[0];
+            }
+
+            console.log(scrollTop);
+
+            //this.getContainer().empty().append(
+            //    next.get('dom').children()
+            //);
+            //w.history.pushState(null, null, next.get('url'));
+            //this.bindEvents(); // TODO check events are not duplicated
+        },
+
         reset: function () {
-            var container = this.getContainer();
+            var container = this.getContainer(),
+                $itemsPerPageSelect = this.$context.find(this.selectors.get('itemsPerPage'));
             container.css({
                 'z-index': 5,
                 'background-color': '#fff'
@@ -228,7 +246,8 @@
 
             this._pages = [];
             this._current = 0;
-            this._itemsPerPage = this.$context.find(this.selectors.get('itemsPerPage')).val();
+            this._itemsPerPage = parseInt($itemsPerPageSelect.val());
+            this._totalItems = parseInt($itemsPerPageSelect.children().last().val());
 
             this.bindEvents();
 
@@ -261,21 +280,25 @@
             }
         },
 
-        // TODO: detect scroll position and update paging DOM
-
         /**
          * @param {!Number} n
          * @returns {Promise}
          */
         scrollToPage: function (n) {
             var scrollTop = n ?
-                function (self) {
+                function (that) {
+                    var initialPage = that._pages.length ? that._pages[0] : null;
+                    if (initialPage) {
+                        return that.$context.find(that.selectors.get('listItem'))
+                            .eq((n - initialPage.get('number')) * that._itemsPerPage)
+                            .offset().top - that.getContainer().height();
+                    }
                     return 0;
                 }(this) :
-                this.$context.offset().top - parseInt(this.getContainer().css('top'));
+                this.$context.offset().top;
 
             return $('html, body').animate({
-                scrollTop: scrollTop
+                scrollTop: scrollTop - parseInt(this.getContainer().css('top'))
             }, 100).promise();
         },
 
@@ -324,7 +347,8 @@
         this.loader = u;
         this.$header = u;
         this.$container = u;
-        this.bindLazyLoadingImages = u;
+        this.offsetTop = 0;
+        this.bindLazyLoadingImages = noop;
 
         util.logV('constructed Depaginator:', this.worker.get('id'));
     }
@@ -337,7 +361,7 @@
             this.$header = $(this.selectors.get('header'));
             this.$container = $(this.selectors.get('container'));
 
-            this.offsetTop = this.$header.height();
+            this.updateOffsets();
             this.paging = new Paging(this.$container, selectors);
 
             this.overrideNative();
@@ -363,12 +387,17 @@
             };
         },
 
+        updateOffsets: function () {
+            this.offsetTop = this.$header.height();
+        },
+
         onContainerScrolled: function (top) {
             this.paging.reposition(top - this.offsetTop <= 0 ? Paging.POSITION.FIXED : Paging.POSITION.STATIC);
+            this.paging.updateCurrentPage(top);
         },
 
         onViewportResized: function () {
-            this.offsetTop = this.$header.height();
+            this.updateOffsets();
             this.paging.adjustDimensions(this.offsetTop);
         },
 
@@ -407,16 +436,9 @@
 
                         next.set('dom', dep.paging.getContainer($r));
 
-
-                        // TODO: move to paging and apply only on specific scroll
-                        dep.$container.find('.paging-header').first().empty().append(
-                            next.get('dom').children()
-                        );
-                        w.history.pushState(null, null, next.get('url'));
-                        dep.paging.bindEvents();
-                        //
-
                         dep.bindLazyLoadingImages();
+
+                        dep.vpObserver.trigger();
                     })
                     .always(function () {
                         dep.isLoading = false;
