@@ -268,11 +268,11 @@
          * @returns {Promise}
          */
         scrollToPage: function (n) {
-            var scrollTop = n
-                ? function (self) {
+            var scrollTop = n ?
+                function (self) {
                     return 0;
-                }(this)
-                : this.$context.offset().top - parseInt(this.getContainer().css('top'));
+                }(this) :
+                this.$context.offset().top - parseInt(this.getContainer().css('top'));
 
             return $('html, body').animate({
                 scrollTop: scrollTop
@@ -305,7 +305,7 @@
          */
         getPage: function (pageNumber) {
             return $.grep(this._pages, function (page) {
-                return page.get('number') === pageNumber
+                return page.get('number') === pageNumber;
             })[0] || null;
         }
     };
