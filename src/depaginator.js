@@ -83,7 +83,8 @@
         attributes: {
             number: 0,
             url: u,
-            dom: null
+            paging: null,
+            nextUrl: u
         }
     });
 
@@ -165,6 +166,7 @@
     function Paging ($context, selectors) {
         this.$context = $context;
         this.selectors = new PagingSelectors(selectors);
+        this._pages = [];
         this.reset();
     }
 
@@ -216,20 +218,40 @@
             }
         },
 
-        updateCurrentPage: function (scrollTop) {
-            var initialPage;
-
+        updateCurrentPage: function (top) {
+            var that = this,
+                offsetTop,
+                initialPageNumber,
+                lastScrolledPageNumber,
+                initialPage, currentPage;
             if (this._pages.length) {
                 initialPage = this._pages[0];
+                initialPageNumber = initialPage.get('number');
+
+                this.$context.find(this.selectors.get('listItem')).each(function(index, el) {
+
+                    if (index % that._itemsPerPage === 0) {
+                        offsetTop = el.getBoundingClientRect().top;
+                        if (offsetTop <= 139) {
+                            lastScrolledPageNumber = initialPageNumber + index / that._itemsPerPage;
+                        } else {
+                            return false;
+                        }
+                    }
+                });
+
+
+                currentPage = lastScrolledPageNumber ? this.getPage(lastScrolledPageNumber) : initialPage;
+
+                if (this._currentPage !== currentPage) {
+                    this.getContainer().empty().append(
+                        currentPage.get('paging').children().clone()
+                    );
+                    w.history.pushState(null, null, currentPage.get('url'));
+                    this.bindEvents();
+                    this._currentPage = currentPage;
+                }
             }
-
-            console.log(scrollTop);
-
-            //this.getContainer().empty().append(
-            //    next.get('dom').children()
-            //);
-            //w.history.pushState(null, null, next.get('url'));
-            //this.bindEvents(); // TODO check events are not duplicated
         },
 
         reset: function () {
@@ -244,10 +266,14 @@
 
             this.position = u;
 
-            this._pages = [];
-            this._current = 0;
+            this._pages.length = 0;
+            this._currentPage = null;
+            this._index = 0;
             this._itemsPerPage = parseInt($itemsPerPageSelect.val());
             this._totalItems = parseInt($itemsPerPageSelect.children().last().val());
+
+            this.collect(this.$context);
+            this.get().set('url', w.location.toString());
 
             this.bindEvents();
 
@@ -255,17 +281,43 @@
         },
 
         /**
-         * @returns {Boolean}
+         * @returns {?PageModel}
          */
-        hasNext: function () {
-            return !!this._pages[this._current+1];
+        get: function () {
+            return this._pages[this._index];
         },
 
         /**
-         * @returns {Object}
+         * @returns {Boolean}
+         */
+        hasNext: function () {
+            var current = this.get();
+            return current && current.get('nextUrl');
+        },
+
+        /**
+         * @returns {?PageModel}
          */
         next: function () {
-            return this._pages[++this._current];
+            return this._pages[++this._index];
+        },
+
+        /**
+         * Collect page data
+         * @param {!jQuery} $context
+         * @returns {!PageModel}
+         */
+        collect: function ($context) {
+            var next = $context.find(this.selectors.get('next'));
+            var model = new PageModel({
+                number: $context.find(this.selectors.get('current')).first().text() * 1,
+                paging: this.getContainer($context).clone()
+            });
+            if (next.length) {
+                model.set('nextUrl', next[0].href);
+            }
+            this._pages.push(model);
+            return model;
         },
 
         onPageNumberClicked: function (e) {
@@ -300,26 +352,6 @@
             return $('html, body').animate({
                 scrollTop: scrollTop - parseInt(this.getContainer().css('top'))
             }, 100).promise();
-        },
-
-        collectPagingData: function () {
-            var currentNumber = this.$context.find(this.selectors.get('current')).text() * 1,
-                next = this.$context.find(this.selectors.get('next'));
-            var currentPageModel = this.getPage(currentNumber);
-            if (!currentPageModel) {
-                currentPageModel = new PageModel({
-                    number: currentNumber,
-                    url: w.location.toString()
-                });
-                this._pages.push(currentPageModel);
-            }
-            if (next.length) {
-                this._pages.push(new PageModel({
-                    number: currentNumber + 1,
-                    url: next[0].href
-                }));
-            }
-            currentPageModel.set('dom', this.getContainer());
         },
 
         /**
@@ -403,45 +435,43 @@
 
         onRequestNextPage: function () {
 
-            var dep = this,
+            var that = this,
                 listSelector = this.selectors.get('list'),
-                next;
+                pageModel = this.paging.get();
 
             if (this.isLoading) {
                 return;
             }
 
-            this.paging.collectPagingData();
-
             if (this.paging.hasNext()) {
 
                 this.isLoading = true;
 
-                next = this.paging.next();
+                that.loader = new classes.DfdLite();
 
-                dep.loader = new classes.DfdLite();
-
-                $.get(next.get('url')).then(
-                    $.proxy(dep.loader.resolve, dep.loader),
-                    $.proxy(dep.loader.reject, dep.loader)
+                $.get(pageModel.get('nextUrl')).then(
+                    $.proxy(that.loader.resolve, that.loader),
+                    $.proxy(that.loader.reject, that.loader)
                 );
 
-                dep.loader.promise()
+                that.loader.promise()
                     .done(function (response) {
                         var $r = $(response);
 
-                        dep.$container.find(listSelector).append(
+                        that.$container.find(listSelector).append(
                             $r.find(listSelector).children()
                         );
 
-                        next.set('dom', dep.paging.getContainer($r));
+                        that.paging.collect($r);
+                        that.paging.next();
+                        that.paging.get().set('url', pageModel.get('nextUrl'));
 
-                        dep.bindLazyLoadingImages();
+                        that.bindLazyLoadingImages();
 
-                        dep.vpObserver.trigger();
+                        that.vpObserver.trigger();
                     })
                     .always(function () {
-                        dep.isLoading = false;
+                        that.isLoading = false;
                     });
             }
 
