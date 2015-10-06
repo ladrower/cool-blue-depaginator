@@ -3,6 +3,7 @@
 
     var $ = w.jQuery,
         $w = $(w),
+        $d = $(d),
         client = w[namespace],
         util = client.exports.util,
         classes = client.exports.classes;
@@ -166,8 +167,10 @@
     function Paging ($context, selectors) {
         this.$context = $context;
         this.selectors = new PagingSelectors(selectors);
+        this.offsetTop = 0;
+        this.isBusy = false;
         this._pages = [];
-        this.reset();
+        this.init();
     }
 
     /**
@@ -185,11 +188,13 @@
         },
 
         adjustDimensions: function (offsetTop) {
-            this.getContainer().css({
+            var container = this.getContainer().css({
                 float: 'left',
                 width: this.$context.width(),
                 top: offsetTop
             });
+            this.offsetTop = offsetTop;
+            this.height = container.height();
         },
 
         bindEvents: function () {
@@ -202,7 +207,7 @@
                 switch (position) {
                     case Paging.POSITION.FIXED:
                         this.$context.css({
-                            'padding-top': container.height()
+                            'padding-top': this.height
                         });
                         break;
                     case Paging.POSITION.STATIC:
@@ -222,24 +227,27 @@
             var that = this,
                 offsetTop,
                 initialPageNumber,
-                lastScrolledPageNumber,
+                lastScrolledPageNumber = 0,
                 initialPage, currentPage;
+
             if (this._pages.length) {
                 initialPage = this._pages[0];
-                initialPageNumber = initialPage.get('number');
 
-                this.$context.find(this.selectors.get('listItem')).each(function(index, el) {
-
-                    if (index % that._itemsPerPage === 0) {
-                        offsetTop = el.getBoundingClientRect().top;
-                        if (offsetTop <= 139) {
-                            lastScrolledPageNumber = initialPageNumber + index / that._itemsPerPage;
-                        } else {
-                            return false;
+                if($w.scrollTop() + $w.height() === $d.height()) {
+                    lastScrolledPageNumber = this.getLast().get('number');
+                } else {
+                    initialPageNumber = initialPage.get('number');
+                    this.$context.find(this.selectors.get('listItem')).each(function(index, el) {
+                        if (index && index % that._itemsPerPage === 0) {
+                            offsetTop = Math.round(el.getBoundingClientRect().top);
+                            if (offsetTop <= (that.height + that.offsetTop)) {
+                                lastScrolledPageNumber = initialPageNumber + index / that._itemsPerPage;
+                            } else {
+                                return false;
+                            }
                         }
-                    }
-                });
-
+                    });
+                }
 
                 currentPage = lastScrolledPageNumber ? this.getPage(lastScrolledPageNumber) : initialPage;
 
@@ -247,31 +255,35 @@
                     this.getContainer().empty().append(
                         currentPage.get('paging').children().clone()
                     );
-                    w.history.pushState(null, null, currentPage.get('url'));
+                    (w.history.pushState || noop).call(w.history, null, null, currentPage.get('url'));
                     this.bindEvents();
                     this._currentPage = currentPage;
                 }
             }
         },
 
-        reset: function () {
+        /**
+         * Init paging
+         * @returns {Paging}
+         */
+        init: function () {
             var container = this.getContainer(),
                 $itemsPerPageSelect = this.$context.find(this.selectors.get('itemsPerPage'));
+
             container.css({
-                'z-index': 5,
+                'z-index': 2,
                 'background-color': '#fff'
             });
 
             this.$context.find(this.selectors.get('pagingFooter')).remove();
 
             this.position = u;
+            this.height = container.height();
 
-            this._pages.length = 0;
-            this._currentPage = null;
-            this._index = 0;
             this._itemsPerPage = parseInt($itemsPerPageSelect.val());
             this._totalItems = parseInt($itemsPerPageSelect.children().last().val());
 
+            this.reset();
             this.collect(this.$context);
             this.get().set('url', w.location.toString());
 
@@ -281,10 +293,28 @@
         },
 
         /**
+         * Reset enumerable
+         * @returns {Paging}
+         */
+        reset: function () {
+            this._pages.length = 0;
+            this._currentPage = null;
+            this._index = 0;
+            return this;
+        },
+
+        /**
          * @returns {?PageModel}
          */
         get: function () {
             return this._pages[this._index];
+        },
+
+        /**
+         * @returns {?PageModel}
+         */
+        getLast: function () {
+            return this._pages[this._pages.length - 1];
         },
 
         /**
@@ -320,18 +350,6 @@
             return model;
         },
 
-        onPageNumberClicked: function (e) {
-            var n = e.target.innerHTML * 1;
-            if (this.getPage(n) !== null) {
-                this.scrollToPage(n);
-                return false;
-            } else {
-                if (this.position === Paging.POSITION.FIXED) {
-                    this.scrollToPage(0);
-                }
-            }
-        },
-
         /**
          * @param {!Number} n
          * @returns {Promise}
@@ -342,15 +360,15 @@
                     var initialPage = that._pages.length ? that._pages[0] : null;
                     if (initialPage) {
                         return that.$context.find(that.selectors.get('listItem'))
-                            .eq((n - initialPage.get('number')) * that._itemsPerPage)
-                            .offset().top - that.getContainer().height();
+                                .eq((n - initialPage.get('number')) * that._itemsPerPage)
+                                .offset().top - that.height;
                     }
                     return 0;
                 }(this) :
                 this.$context.offset().top;
 
             return $('html, body').animate({
-                scrollTop: scrollTop - parseInt(this.getContainer().css('top'))
+                scrollTop: scrollTop - this.offsetTop
             }, 100).promise();
         },
 
@@ -360,8 +378,43 @@
          */
         getPage: function (pageNumber) {
             return $.grep(this._pages, function (page) {
-                return page.get('number') === pageNumber;
-            })[0] || null;
+                    return page.get('number') === pageNumber;
+                })[0] || null;
+        },
+
+        /**
+         * @callback
+         * @param {Event} e
+         * @returns {undefined|boolean}
+         */
+        onPageNumberClicked: function (e) {
+            var that = this,
+                n = e.target.innerHTML * 1;
+
+            if (this.isBusy) {
+                return false;
+            }
+
+            this.isBusy = true;
+
+            if (this.getPage(n) !== null) {
+                this.scrollToPage(n).then(function () {
+                    that.isBusy = false;
+                    this.trigger('scroll');
+                    return this;
+                });
+                return false;
+            } else {
+                if (this.position === Paging.POSITION.FIXED) {
+                    this.scrollToPage(0).then(function () {
+                        that.reset();
+                        that.isBusy = false;
+                        this.trigger('scroll');
+                    });
+                } else {
+                    this.isBusy = false;
+                }
+            }
         }
     };
 
@@ -425,7 +478,7 @@
 
         onContainerScrolled: function (top) {
             this.paging.reposition(top - this.offsetTop <= 0 ? Paging.POSITION.FIXED : Paging.POSITION.STATIC);
-            this.paging.updateCurrentPage(top);
+            return !this.paging.isBusy && this.paging.updateCurrentPage(top);
         },
 
         onViewportResized: function () {
@@ -434,7 +487,6 @@
         },
 
         onRequestNextPage: function () {
-
             var that = this,
                 listSelector = this.selectors.get('list'),
                 pageModel = this.paging.get();
@@ -467,11 +519,10 @@
                         that.paging.get().set('url', pageModel.get('nextUrl'));
 
                         that.bindLazyLoadingImages();
-
-                        that.vpObserver.trigger();
                     })
                     .always(function () {
                         that.isLoading = false;
+                        that.vpObserver.trigger();
                     });
             }
 
@@ -481,7 +532,7 @@
                 this.loader.reject();
                 this.loader = u;
             }
-            this.paging.reset();
+            this.paging.init();
             this.vpObserver.trigger();
         }
     };

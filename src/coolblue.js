@@ -1456,9 +1456,8 @@
         DfdLite
             .all([
                 (function () {
-                    return $;
-                    //var v = $ && $.fn && $.fn.jquery && $.fn.jquery.split('.');
-                    //return v && v[0]*1 > 0 && v[1]*1 >= 8 && $;
+                    var v = $ && $.fn && $.fn.jquery && $.fn.jquery.split('.');
+                    return v && (v[0]*1 === 1 && v[1]*1 >= 8 || v[0]*1 === 2) && $;
                 })() || loadModule(MODULE.JQUERY),
                 (function () {
                     return typeof w.JSON !== 'undefined' && w.JSON;
