@@ -71,6 +71,7 @@
             pages: '',
             current: '',
             next: '',
+            prev: '',
             itemsPerPage: '',
             listItem: ''
         }
@@ -199,6 +200,8 @@
 
         bindEvents: function () {
             this.getContainer().find(this.selectors.get('pages')).on('click', $.proxy(this.onPageNumberClicked, this));
+            this.getContainer().find(this.selectors.get('next')).on('click', $.proxy(this.onPageNextClicked, this));
+            this.getContainer().find(this.selectors.get('prev')).on('click', $.proxy(this.onPagePrevClicked, this));
         },
 
         reposition: function (position) {
@@ -262,6 +265,10 @@
             }
         },
 
+        toggleLoader: function (v) {
+            this.$loader.toggle(v);
+        },
+
         /**
          * Init paging
          * @returns {Paging}
@@ -275,7 +282,10 @@
                 'background-color': '#fff'
             });
 
-            this.$context.find(this.selectors.get('pagingFooter')).remove();
+            this.$loader = this.$context.find(this.selectors.get('pagingFooter'))
+                .empty()
+                .addClass('facet_loader_spinner_animation spinner-animation')
+                .css('position', 'relative');
 
             this.position = u;
             this.height = container.height();
@@ -383,13 +393,11 @@
         },
 
         /**
-         * @callback
-         * @param {Event} e
-         * @returns {undefined|boolean}
+         * @param {Number} n
+         * @returns {boolean}
          */
-        onPageNumberClicked: function (e) {
-            var that = this,
-                n = e.target.innerHTML * 1;
+        onPageRequested: function (n) {
+            var that = this;
 
             if (this.isBusy) {
                 return false;
@@ -403,7 +411,7 @@
                     this.trigger('scroll');
                     return this;
                 });
-                return false;
+                return true;
             } else {
                 if (this.position === Paging.POSITION.FIXED) {
                     this.scrollToPage(0).then(function () {
@@ -415,6 +423,34 @@
                     this.isBusy = false;
                 }
             }
+            return false;
+        },
+
+        /**
+         * @callback
+         * @param {Event} e
+         * @returns {boolean}
+         */
+        onPageNumberClicked: function (e) {
+            return !this.onPageRequested(e.target.innerHTML * 1);
+        },
+
+        /**
+         * @callback
+         * @param {Event} e
+         * @returns {boolean}
+         */
+        onPageNextClicked: function (e) {
+            return !this.onPageRequested(this._currentPage ? this._currentPage.get('number') + 1 : -1);
+        },
+
+        /**
+         * @callback
+         * @param {Event} e
+         * @returns {boolean}
+         */
+        onPagePrevClicked: function (e) {
+            return !this.onPageRequested(this._currentPage ? this._currentPage.get('number') - 1 : -1);
         }
     };
 
@@ -498,15 +534,16 @@
             if (this.paging.hasNext()) {
 
                 this.isLoading = true;
+                this.paging.toggleLoader(true);
 
-                that.loader = new classes.DfdLite();
+                this.loader = new classes.DfdLite();
 
                 $.get(pageModel.get('nextUrl')).then(
                     $.proxy(that.loader.resolve, that.loader),
                     $.proxy(that.loader.reject, that.loader)
                 );
 
-                that.loader.promise()
+                this.loader.promise()
                     .done(function (response) {
                         var $r = $(response);
 
@@ -522,6 +559,7 @@
                     })
                     .always(function () {
                         that.isLoading = false;
+                        that.paging.toggleLoader(false);
                         that.vpObserver.trigger();
                     });
             }

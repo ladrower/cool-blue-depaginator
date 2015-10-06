@@ -42,6 +42,7 @@ chrome.storage.sync.get(['debugEnabled','cdn','api'], function(options) {
                         pages: '.paging-navigation-pages>li>a',
                         current: '.paging-navigation-pages>li.paging-navigation-current-page',
                         next: '.paging-navigation .pagination.next',
+                        prev: '.paging-navigation .pagination.previous',
                         itemsPerPage: '.paging-shown-per-page'
                     });
                     worker.send('event', 'depaginator', 'created');
