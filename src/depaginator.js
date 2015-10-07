@@ -266,7 +266,7 @@
         },
 
         toggleLoader: function (v) {
-            this.$loader.toggle(v);
+            this.$loader.css('visibility', v ? 'visible' : 'hidden');
         },
 
         /**
@@ -285,7 +285,10 @@
             this.$loader = this.$context.find(this.selectors.get('pagingFooter'))
                 .empty()
                 .addClass('facet_loader_spinner_animation spinner-animation')
-                .css('position', 'relative');
+                .css({
+                    position: 'relative',
+                    visibility: 'hidden'
+                }).show();
 
             this.position = u;
             this.height = container.height();
@@ -508,6 +511,15 @@
             };
         },
 
+        reinitComparisonBar: function () {
+            try {
+                $($.comparison.bar.defaultOptions.comparisonElementSelector + ' input.checkbox').off('click');
+                $d.off('click.comparisonbar');
+                $.comparison.bar();
+                $.comparison.collapse.activate();
+            } catch (e) {}
+        },
+
         updateOffsets: function () {
             this.offsetTop = this.$header.height();
         },
@@ -556,6 +568,7 @@
                         that.paging.get().set('url', pageModel.get('nextUrl'));
 
                         that.bindLazyLoadingImages();
+                        util.async(that.reinitComparisonBar, that);
                     })
                     .always(function () {
                         that.isLoading = false;
