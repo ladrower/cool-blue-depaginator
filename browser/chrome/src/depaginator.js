@@ -15,7 +15,6 @@ chrome.storage.sync.get([
     'itemsPerPage'
 ], function(options) {
 
-    console.log(options);
     var id = '__CoolblueNamespace__';
 
     return !document.getElementById(id) && function init () {
@@ -76,7 +75,6 @@ chrome.storage.sync.get([
                             itemsPerPage: itemsPerPage
                         });
                         worker.send('event', 'depaginator', 'created');
-                        console.log(itemsPerPage);
                     });
 
                 } + ')('
@@ -89,6 +87,7 @@ chrome.storage.sync.get([
                     +options.listItem+'","'
                     +options.pagingHeader+'","'
                     +options.pagingFooter+'","'
+                    +options.pages+'","'
                     +options.current+'","'
                     +options.next+'","'
                     +options.prev+'","'
