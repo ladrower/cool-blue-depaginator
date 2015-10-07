@@ -171,6 +171,7 @@
         this.offsetTop = 0;
         this.isBusy = false;
         this._pages = [];
+        this._onResetCb = [];
         this.init();
     }
 
@@ -233,7 +234,7 @@
                 lastScrolledPageNumber = 0,
                 initialPage, currentPage;
 
-            if (this._pages.length) {
+            if (!this.isBusy && this._pages.length) {
                 initialPage = this._pages[0];
 
                 if($w.scrollTop() + $w.height() === $d.height()) {
@@ -313,7 +314,14 @@
             this._pages.length = 0;
             this._currentPage = null;
             this._index = 0;
+            $.each(this._onResetCb, function (i, cb) {
+                cb();
+            });
             return this;
+        },
+
+        subscribeOnReset: function (callback) {
+            this._onResetCb.push(callback);
         },
 
         /**
@@ -487,6 +495,7 @@
 
             this.updateOffsets();
             this.paging = new Paging(this.$container, selectors);
+            this.paging.subscribeOnReset($.proxy(this.abort, this));
 
             this.overrideNative();
 
@@ -500,6 +509,13 @@
             }
 
             return this;
+        },
+
+        abort: function () {
+            if (this.loader) {
+                this.loader.reject();
+                this.loader = u;
+            }
         },
 
         overrideNative: function () {
@@ -526,7 +542,7 @@
 
         onContainerScrolled: function (top) {
             this.paging.reposition(top - this.offsetTop <= 0 ? Paging.POSITION.FIXED : Paging.POSITION.STATIC);
-            return !this.paging.isBusy && this.paging.updateCurrentPage(top);
+            this.paging.updateCurrentPage(top);
         },
 
         onViewportResized: function () {
@@ -579,10 +595,6 @@
 
         },
         onAfterPageReloaded: function () {
-            if (this.loader) {
-                this.loader.reject();
-                this.loader = u;
-            }
             this.paging.init();
             this.vpObserver.trigger();
         }
